@@ -1,4 +1,4 @@
-# ai-tutor-mcp
+# mcp-tutor-agent
 
 A local AI tutor: a FastAPI chat agent backed by a local Ollama model that calls
 tools over MCP (Model Context Protocol).
