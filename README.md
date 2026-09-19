@@ -143,17 +143,104 @@ curl -X POST http://127.0.0.1:9000/chat -F "query=What is the price of bitcoin i
 
 ```
   ui  ──POST /chat──▶  agent
-                         │  1. ask mcp for the list of tools
-                         │  2. send question + tools to the llm
-                         │  3. llm replies "call get_crypto_price(bitcoin, inr)"
+                         │
+                         │  1. ask mcp: which tools exist?      ◀── every request
+                         │  2. send prompt + tool list to llm
+                         │  3. llm: "call get_crypto_price(bitcoin, inr)"
                          │  4. agent runs it via mcp  ──▶  CoinGecko
-                         │  5. send question + result back to the llm
-                         └──────────────────────────▶  answer  ──▶  ui
+                         │  5. build a NEW prompt: query + result
+                         │  6. send it to the llm again
+                         └──────────────▶  answer  ──▶  ui
 ```
 
 The model never touches the internet itself. It only ever says *which* tool it
 wants; the agent is what actually calls it. That separation is the whole idea
 behind MCP.
+
+### Step by step
+
+Follow one question through the system. Line numbers are in
+`src/agent/chat_agent.py`.
+
+**Step 1 — the agent asks the MCP server what tools exist.** ([line 13](src/agent/chat_agent.py#L13))
+
+Before the model is involved at all, `list_mcp_tools()` fetches the tool list
+and reshapes it into the JSON schema the model expects:
+
+```
+tools from MCP: ['get_crypto_price']
+```
+
+This happens on *every* request. It is why the MCP server must be running even
+for a question that ends up needing no tool.
+
+**Step 2 — the agent sends the prompt and the tool list to the LLM.** ([lines 27–29](src/agent/chat_agent.py#L27-L29))
+
+`get_prompt(query)` builds a prompt holding the question and the placeholder
+`Tool Result: No tool result available`. The tool list travels separately,
+attached with `bind_tools`.
+
+**Step 3 — the LLM replies in one of two ways.** ([line 31](src/agent/chat_agent.py#L31))
+
+It either asks for a tool, or answers outright:
+
+| Question | `tool_calls` | `content` |
+| --- | --- | --- |
+| *price of bitcoin in inr?* | `[('get_crypto_price', {'coin': 'bitcoin', 'currency': 'inr'})]` | `''` |
+| *Who wrote Hamlet?* | `[]` | `'Hamlet was written by William Shakespeare.'` |
+
+Notice the empty `content` in the first row. When the model wants a tool it
+returns **no prose at all** — just the request. That emptiness is exactly what
+`needs_tool_execution()` tests for.
+
+**Step 4 — no tool call? Then the answer is already finished.** ([line 46](src/agent/chat_agent.py#L46))
+
+The agent takes `content` and returns it. The MCP server is never called a
+second time, and only one LLM round trip happened.
+
+**Step 5 — a tool call? The agent calls the MCP server.** ([lines 33–38](src/agent/chat_agent.py#L33-L38))
+
+It passes the name and arguments the model chose. Note `tool_calls[0]`: if the
+model asks for several tools at once, only the first one runs.
+
+**Step 6 — the MCP server runs the function and returns the result.** (`src/mcp/server.py`)
+
+The server — not the model, and not the agent — is what actually reaches
+CoinGecko. What comes back is a structured `CallToolResult`:
+
+```
+meta=None content=[TextContent(type='text', text='7797722', ...)]
+structuredContent={'result': 7797722.0} isError=False
+```
+
+If the tool raises, this returns with `isError=True` instead of crashing. That
+is why a nonsense coin produces a polite explanation rather than a stack trace.
+
+**Step 7 — the agent builds a brand-new prompt containing the result.** ([line 40](src/agent/chat_agent.py#L40))
+
+`get_prompt(query, tool_result)` produces a *fresh* prompt holding the original
+question **and** the tool result. Nothing is appended to a conversation — there
+is no message history here, just a new string. The prompt's instructions then
+tell the model it must answer from the tool result.
+
+**Step 8 — the LLM turns the raw result into a sentence.** ([lines 42–44](src/agent/chat_agent.py#L42-L44))
+
+`7797722` becomes *"The current price of Bitcoin in INR is approximately
+7,797,722 INR."* That answer goes back to the UI.
+
+### What this deliberately leaves out
+
+Kept simple on purpose — each of these is a good exercise:
+
+- **One tool per question.** Only `tool_calls[0]` runs ([line 33](src/agent/chat_agent.py#L33)).
+- **One round trip.** The agent never loops, so a question needing two tools in
+  sequence cannot be answered. A real agent repeats steps 3–7 until the model
+  stops asking for tools.
+- **No memory.** Each request builds its prompt from scratch, so follow-up
+  questions like *"and in usd?"* have no idea what came before.
+- **Tools are still bound on the second call** ([line 42](src/agent/chat_agent.py#L42)). If
+  the model asked for another tool there, `content` would be `''` and the user
+  would see a blank answer.
 
 ## Structure
 
