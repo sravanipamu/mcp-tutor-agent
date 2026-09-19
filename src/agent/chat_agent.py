@@ -1,7 +1,7 @@
-from mcp_client import list_mcp_tools, call_mcp_tool
-from llm_ollama import call_llm
+from src.mcp.client import list_mcp_tools, call_mcp_tool
+from src.llm.ollama import call_llm
 from langchain_core.messages import AIMessage
-from prompt import get_prompt
+from src.agent.prompt import get_prompt
 
 class ChatAgent:
     

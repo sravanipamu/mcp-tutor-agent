@@ -3,13 +3,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Form
 from fastapi.responses import FileResponse
 
-from agent import ChatAgent
+from src.agent.chat_agent import ChatAgent
 
 app = FastAPI()
 
 chat_agent = ChatAgent()
 
-INDEX_FILE = Path(__file__).parent / "static" / "index.html"
+INDEX_FILE = Path(__file__).parent / "src" / "ui" / "index.html"
 
 @app.get("/")
 async def index():
