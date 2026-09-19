@@ -7,12 +7,13 @@ tools over MCP (Model Context Protocol).
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | FastAPI app exposing `POST /chat` |
+| `main.py` | FastAPI app: serves the UI at `/` and `POST /chat` |
 | `agent.py` | Agent loop: list tools → ask LLM → run tool → ask LLM again |
 | `llm_ollama.py` | Ollama chat model wrapper (`qwen2.5:7b-instruct`) |
 | `mcp_client.py` | MCP SSE client (lists and calls tools) |
 | `mcp_server.py` | MCP server exposing the `get_crypto_price` tool |
 | `prompt.py` | Prompt template |
+| `static/index.html` | Single-input web UI (no build step) |
 
 ## Setup
 
@@ -37,6 +38,10 @@ uvicorn main:app --reload --port 9000
 ```
 
 ## Try it
+
+Open <http://127.0.0.1:9000> and type a question, then press Enter.
+
+Or call the API directly:
 
 ```bash
 curl -X POST http://127.0.0.1:9000/chat -F "query=What is the price of bitcoin in inr?"

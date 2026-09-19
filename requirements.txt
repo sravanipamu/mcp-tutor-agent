@@ -6,3 +6,4 @@ mcp
 requests
 pypdf
 sentence-transformers
+python-multipart

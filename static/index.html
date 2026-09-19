@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mcp-tutor-agent</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbfa;
+    --fg: #1a1a18;
+    --muted: #6b6b66;
+    --line: #e2e2dd;
+    --card: #ffffff;
+    --accent: #3d5a3d;
+    --error: #a33a2c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a;
+      --fg: #e8e8e4;
+      --muted: #8f8f89;
+      --line: #2e3033;
+      --card: #1f2023;
+      --accent: #8fbf8f;
+      --error: #e08171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 16px;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.6 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 680px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .sub { margin: 4px 0 28px; color: var(--muted); font-size: 13px; }
+  input {
+    width: 100%;
+    padding: 14px 16px;
+    font: inherit;
+    color: var(--fg);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  input:disabled { opacity: 0.6; }
+  .hint { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  #answer {
+    margin-top: 28px;
+    padding: 18px 20px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  #answer.error { color: var(--error); border-color: var(--error); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>mcp-tutor-agent</h1>
+  <p class="sub">Ask a question. The agent will call an MCP tool when it needs one.</p>
+
+  <input id="query" type="text" placeholder="What is the price of bitcoin in inr?" autofocus autocomplete="off">
+  <div class="hint">Press Enter to send</div>
+
+  <div id="answer" hidden></div>
+</main>
+
+<script>
+  const input = document.getElementById("query");
+  const answer = document.getElementById("answer");
+
+  function show(text, isError) {
+    answer.textContent = text;
+    answer.classList.toggle("error", Boolean(isError));
+    answer.hidden = false;
+  }
+
+  async function ask(query) {
+    input.disabled = true;
+    show("Thinking...", false);
+
+    try {
+      const body = new FormData();
+      body.append("query", query);
+
+      const response = await fetch("/chat", { method: "POST", body });
+      const data = await response.json();
+
+      if (!response.ok) {
+        show(data.detail || ("Request failed with status " + response.status), true);
+      } else {
+        show(data.answer, false);
+      }
+    } catch (err) {
+      show("Could not reach the API: " + err.message, true);
+    } finally {
+      input.disabled = false;
+      input.focus();
+    }
+  }
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+
+    const query = input.value.trim();
+    if (!query) return;
+
+    ask(query);
+  });
+</script>
+</body>
+</html>
